@@ -33,10 +33,10 @@ func NewGoogleGeocoder(apiKey string) *google {
 type apiResponse struct {
 	Status       string      `json:"status"`
 	ErrorMessage string      `json:"error_message"`
-	Results      []ApiResult `json:"results"`
+	Results      []apiResult `json:"results"`
 }
 
-type ApiResult struct {
+type apiResult struct {
 	FormattedAddress  string                `json:"formatted_address"`
 	PlaceID           string                `json:"place_id"`
 	Geometry          apiGeometry           `json:"geometry"`
@@ -153,13 +153,15 @@ func (g *google) ReverseGeocode(ctx context.Context, lat, lng float64) ([]geokit
 
 // toPlace maps a Google API result to a geokit.Place, populating both
 // coordinates and structured address fields from address_components.
-func toPlace(r ApiResult) geokit.Place {
+func toPlace(r apiResult) geokit.Place {
 	p := geokit.Place{
 		Lat:              r.Geometry.Location.Lat,
 		Lng:              r.Geometry.Location.Lng,
 		LocationType:     r.Geometry.LocationType,
 		FormattedAddress: r.FormattedAddress,
 		PlaceID:          r.PlaceID,
+		PartialMatch:     r.PartialMatch,
+		Types:            r.Types,
 	}
 
 	country := countryFromComponents(r.AddressComponents)

@@ -21,4 +21,8 @@ type Place struct {
 	// Shared identifiers
 	FormattedAddress string
 	PlaceID          string
+
+	// Confidence signals
+	PartialMatch bool     // true if Google couldn't fully resolve the input address
+	Types        []string // result type tags, e.g. ["street_address", "premise"]
 }
