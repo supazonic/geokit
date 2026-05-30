@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
-	"strings"
 
 	"github.com/supazonic/geokit"
 )
@@ -34,10 +33,10 @@ func NewGoogleGeocoder(apiKey string) *google {
 type apiResponse struct {
 	Status       string      `json:"status"`
 	ErrorMessage string      `json:"error_message"`
-	Results      []apiResult `json:"results"`
+	Results      []ApiResult `json:"results"`
 }
 
-type apiResult struct {
+type ApiResult struct {
 	FormattedAddress  string                `json:"formatted_address"`
 	PlaceID           string                `json:"place_id"`
 	Geometry          apiGeometry           `json:"geometry"`
@@ -68,6 +67,23 @@ type apiAddressComponent struct {
 	ShortName string   `json:"short_name"`
 	Types     []string `json:"types"`
 }
+
+type locationType string
+
+func (lt locationType) String() string {
+	return string(lt)
+}
+
+const (
+	//	Exact coordinates of the specific building/address
+	LocationType_ROOFTOP locationType = "ROOFTOP"
+	// Estimated point between two known rooftop addresses on a street
+	LocationType_RANGE_INTERPOLATED locationType = "RANGE_INTERPOLATED"
+	// Center point of a region (road, neighborhood, city, etc.)
+	LocationType_GEOMETRIC_CENTER locationType = "GEOMETRIC_CENTER"
+	// Rough location, only loosely associated with the address
+	LocationType_APPROXIMATE locationType = "APPROXIMATE"
+)
 
 // --- shared HTTP helper ---
 
@@ -104,28 +120,23 @@ func (g *google) fetch(ctx context.Context, params url.Values) (*apiResponse, er
 
 // --- geokit.Geocoder implementation ---
 
-// Geocode converts an address string into Locations via the Google Geocoding API.
-func (g *google) Geocode(ctx context.Context, address string) ([]geokit.Location, error) {
+// Geocode converts an address string into Places via the Google Geocoding API.
+func (g *google) Geocode(ctx context.Context, address string) ([]geokit.Place, error) {
 	params := url.Values{"address": {address}}
 	apiResp, err := g.fetch(ctx, params)
 	if err != nil {
 		return nil, err
 	}
 
-	locations := make([]geokit.Location, len(apiResp.Results))
+	places := make([]geokit.Place, len(apiResp.Results))
 	for i, r := range apiResp.Results {
-		locations[i] = geokit.Location{
-			Lat:              r.Geometry.Location.Lat,
-			Lng:              r.Geometry.Location.Lng,
-			FormattedAddress: r.FormattedAddress,
-			PlaceID:          r.PlaceID,
-		}
+		places[i] = toPlace(r)
 	}
-	return locations, nil
+	return places, nil
 }
 
-// ReverseGeocode converts coordinates into Addresses via the Google Geocoding API.
-func (g *google) ReverseGeocode(ctx context.Context, lat, lng float64) ([]geokit.Address, error) {
+// ReverseGeocode converts coordinates into Places via the Google Geocoding API.
+func (g *google) ReverseGeocode(ctx context.Context, lat, lng float64) ([]geokit.Place, error) {
 	latlng := strconv.FormatFloat(lat, 'f', -1, 64) + "," + strconv.FormatFloat(lng, 'f', -1, 64)
 	params := url.Values{"latlng": {latlng}}
 	apiResp, err := g.fetch(ctx, params)
@@ -133,49 +144,28 @@ func (g *google) ReverseGeocode(ctx context.Context, lat, lng float64) ([]geokit
 		return nil, err
 	}
 
-	addresses := make([]geokit.Address, len(apiResp.Results))
+	places := make([]geokit.Place, len(apiResp.Results))
 	for i, r := range apiResp.Results {
-		addresses[i] = toAddress(r)
+		places[i] = toPlace(r)
 	}
-	return addresses, nil
+	return places, nil
 }
 
-// toAddress maps a Google API result to a geokit.Address by extracting
-// typed address_components.
-func toAddress(r apiResult) geokit.Address {
-	a := geokit.Address{
+// toPlace maps a Google API result to a geokit.Place, populating both
+// coordinates and structured address fields from address_components.
+func toPlace(r ApiResult) geokit.Place {
+	p := geokit.Place{
+		Lat:              r.Geometry.Location.Lat,
+		Lng:              r.Geometry.Location.Lng,
+		LocationType:     r.Geometry.LocationType,
 		FormattedAddress: r.FormattedAddress,
 		PlaceID:          r.PlaceID,
 	}
 
-	var streetNumber, route string
-	for _, c := range r.AddressComponents {
-		switch {
-		case hasType(c.Types, "street_number"):
-			streetNumber = c.LongName
-		case hasType(c.Types, "route"):
-			route = c.LongName
-		case hasType(c.Types, "locality"):
-			a.City = c.LongName
-		case hasType(c.Types, "administrative_area_level_1"):
-			a.State = c.LongName
-		case hasType(c.Types, "postal_code"):
-			a.PostalCode = c.LongName
-		case hasType(c.Types, "country"):
-			a.Country = c.LongName
-		}
-	}
+	country := countryFromComponents(r.AddressComponents)
+	parserForCountry(country).Parse(r.AddressComponents, &p)
 
-	parts := make([]string, 0, 2)
-	if streetNumber != "" {
-		parts = append(parts, streetNumber)
-	}
-	if route != "" {
-		parts = append(parts, route)
-	}
-	a.Street = strings.Join(parts, " ")
-
-	return a
+	return p
 }
 
 func hasType(types []string, target string) bool {

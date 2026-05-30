@@ -1,22 +1,24 @@
 package geokit
 
-// Location is the result of a forward geocoding lookup.
-type Location struct {
-	Lat        float64
-	Lng        float64
-	FormattedAddress string
-	// PlaceID is a provider-specific identifier for the place, if available.
-	PlaceID string
-}
+// Place is the unified result of both forward and reverse geocoding.
+// Forward geocoding fills Lat, Lng, LocationType, and basic address fields.
+// Reverse geocoding fills all address fields alongside the coordinates.
+type Place struct {
+	// Coordinates
+	Lat          float64
+	Lng          float64
+	LocationType string // ROOFTOP, RANGE_INTERPOLATED, GEOMETRIC_CENTER, APPROXIMATE
 
-// Address is the result of a reverse geocoding lookup.
-type Address struct {
+	// Address
+	Line1      string // chome-ban-go + neighborhood (JP) / street number + street name (Western)
+	Line2      string // building name + room number, if any
+	City       string
+	District   string // administrative_area_level_2, e.g. Iruma District (Japan)
+	State      string // prefecture in Japan, state/province elsewhere
+	PostalCode string
+	Country    string
+
+	// Shared identifiers
 	FormattedAddress string
-	Street           string
-	City             string
-	State            string
-	PostalCode       string
-	Country          string
-	// PlaceID is a provider-specific identifier for the place, if available.
-	PlaceID string
+	PlaceID          string
 }
