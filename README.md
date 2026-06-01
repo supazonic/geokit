@@ -5,7 +5,7 @@ A Go geocoding library with a provider-agnostic interface. Import one backend or
 ## Installation
 
 ```sh
-go get github.com/supazonic/geokit
+go get github.com/supazonic/geokit@v0.1.0
 ```
 
 ## What it does
